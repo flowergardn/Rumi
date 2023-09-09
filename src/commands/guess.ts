@@ -21,10 +21,16 @@ import NodeCache from 'node-cache';
 import shuffleArray from '../lib/shuffle';
 const gameCache = new NodeCache();
 
+interface GameInfo {
+	song: string;
+	allLyrics: string;
+	currentLyrics: string;
+	timer: NodeJS.Timeout;
+}
+
 const getRandomLyric = (songLyrics: string) => {
 	const verses = songLyrics.split('\n\n');
-
-	const randomVerse = random(verses);
+	const randomVerse = [random(verses), random(verses)].join('\n');
 	const randomLyrics = randomVerse.split('\n').slice(0, 4).join('\n');
 	return randomLyrics;
 };
@@ -104,6 +110,10 @@ class Game {
 
 		const embed = new EmbedBuilder().setTitle('Guess the song!');
 		embed.setDescription(randomLyrics);
+		embed.setFooter({
+			text: `You have two minutes`
+		});
+		embed.setTimestamp();
 
 		const getMoreLyrics = new ButtonBuilder()
 			.setLabel('Get more lyrics')
@@ -142,10 +152,37 @@ class Game {
 			content: `Started game! Name of song is: ${spoiler(song)}`
 		});
 
+		// Using node-cache expiry was the first solution, it did not work.
+
+		const timeout = setTimeout(() => {
+			const keyId = `gameInfo-${msg.id}`;
+			const gameInfo: GameInfo = gameCache.get(keyId);
+
+			if (!gameInfo) return;
+
+			const embed = new EmbedBuilder()
+				.setTitle('Times up!')
+				.setColor('Red')
+				.setDescription(`No one guessed the song in time.`)
+				.setFields([
+					{
+						name: 'Song',
+						value: gameInfo.song
+					}
+				]);
+
+			gameCache.del(keyId);
+
+			msg.reply({
+				embeds: [embed]
+			});
+		}, 120 * 1000);
+
 		gameCache.set(`gameInfo-${msg.id}`, {
 			song,
 			allLyrics: songLyrics,
-			currentLyrics: randomLyrics
+			currentLyrics: randomLyrics,
+			timer: timeout
 		});
 	}
 
@@ -176,11 +213,7 @@ class Game {
 			return;
 		}
 
-		const gameInfo: {
-			song: string;
-			allLyrics: string;
-			currentLyrics: string;
-		} = gameCache.get(`gameInfo-${id}`);
+		const gameInfo: GameInfo = gameCache.get(`gameInfo-${id}`);
 
 		if (!gameInfo) return;
 
@@ -217,11 +250,7 @@ class Game {
 		const msg = interaction.message;
 		const id = msg.id;
 
-		const gameInfo: {
-			song: string;
-			allLyrics: string;
-			currentLyrics: string;
-		} = gameCache.get(`gameInfo-${id}`);
+		const gameInfo: GameInfo = gameCache.get(`gameInfo-${id}`);
 
 		if (!gameInfo) return;
 
@@ -274,6 +303,7 @@ class Game {
 				ephemeral: true
 			});
 
+			clearTimeout(gameInfo.timer);
 			gameCache.del(`gameInfo-${id}`);
 		} else {
 			// TODO: Add a cooldown for guessing.
