@@ -1,0 +1,25 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  // https://www.prisma.io/docs/concepts/components/prisma-schema/data-sources
+  // If using docker, this requires a volume to be created in order to prevent data loss.
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Server {
+  id String @id
+  artists String @default("[]")
+}
+
+model Artist {
+  id String @id @default(cuid())
+  name String @unique
+  // JSON encoded array of song names
+  songs String @default("[]")
+}
