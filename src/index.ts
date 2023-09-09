@@ -27,6 +27,7 @@ client.on('interactionCreate', (interaction) => {
 });
 
 async function start() {
+	await importx(__dirname + '/events/*.{js,ts}');
 	await importx(__dirname + '/commands/*.{js,ts}');
 	await importx(__dirname + '/commands/*/*.{js,ts}');
 	await client.login(env.TOKEN);
