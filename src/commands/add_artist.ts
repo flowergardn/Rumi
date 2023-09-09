@@ -2,6 +2,7 @@ import { ApplicationCommandOptionType, CommandInteraction, inlineCode } from 'di
 import { Discord, Slash, SlashOption } from 'discordx';
 import axios from 'axios';
 import { prisma } from '..';
+import { env } from '../env';
 
 interface LastFMTrack {
 	name: string;
@@ -47,7 +48,7 @@ class AddArtist {
 				params: {
 					method: 'artist.gettoptracks',
 					artist,
-					api_key: '8c250ccdcabef2dfd855218787dc2f18',
+					api_key: env.LAST_FM_TOKEN,
 					format: 'json'
 				},
 				headers: { 'User-Agent': 'astridlol/Rumi' }
