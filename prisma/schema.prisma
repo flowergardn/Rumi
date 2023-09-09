@@ -23,3 +23,8 @@ model Artist {
   // JSON encoded array of song names
   songs String @default("[]")
 }
+
+model Member {
+  id String @id
+  points Int @default(0)
+}

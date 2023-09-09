@@ -7,6 +7,7 @@ import {
 	EmbedBuilder,
 	SelectMenuBuilder,
 	SelectMenuInteraction,
+	bold,
 	inlineCode,
 	spoiler
 } from 'discord.js';
@@ -26,6 +27,24 @@ const getRandomLyric = (songLyrics: string) => {
 	const randomVerse = random(verses);
 	const randomLyrics = randomVerse.split('\n').slice(0, 4).join('\n');
 	return randomLyrics;
+};
+
+const getPlayer = async (id: string) => {
+	let player = await prisma.member.findUnique({
+		where: {
+			id: id
+		}
+	});
+
+	if (player) return player;
+
+	player = await prisma.member.create({
+		data: {
+			id
+		}
+	});
+
+	return player;
 };
 
 @Discord()
@@ -133,8 +152,29 @@ class Game {
 	@ButtonComponent({ id: /get_more/ })
 	async moreLyrics(interaction: ButtonInteraction) {
 		const msg = interaction.message;
-
 		const id = msg.id;
+
+		const cd = gameCache.get(`lyricCooldown-${id}`);
+
+		if (typeof cd != 'undefined') {
+			interaction.reply({
+				content: `A hint was already given out recently!`,
+				ephemeral: true
+			});
+			return;
+		}
+
+		const embed = msg.embeds.shift();
+
+		const hints = (embed.description.match(/\n\n/g) || []).length;
+
+		if (hints == 5) {
+			interaction.reply({
+				content: `Reached the maximum number of hints! (5)`,
+				ephemeral: true
+			});
+			return;
+		}
 
 		const gameInfo: {
 			song: string;
@@ -144,7 +184,14 @@ class Game {
 
 		if (!gameInfo) return;
 
-		const embed = msg.embeds.shift();
+		if (!embed) {
+			console.log(msg.embeds);
+			interaction.reply({
+				content: `An error occured whilst trying to show a hint!`,
+				ephemeral: true
+			});
+			return;
+		}
 
 		const newEmbed = new EmbedBuilder(embed.toJSON());
 
@@ -156,12 +203,11 @@ class Game {
 
 		newEmbed.setDescription(embed.description + '\n\n' + lyrics);
 
-		await msg.fetch();
-		await msg.channel.fetch();
-
 		msg.edit({
 			embeds: [newEmbed]
 		});
+
+		gameCache.set(`lyricCooldown-${id}`, true, 20);
 
 		interaction.deferUpdate();
 	}
@@ -182,9 +228,50 @@ class Game {
 		const song = interaction.values?.[0];
 		let songTitle = new Buffer(song, 'base64').toString('ascii');
 
-		if (songTitle.toLowerCase() == gameInfo.song) {
+		if (songTitle.toLowerCase() == gameInfo.song.toLowerCase()) {
+			const hints = (msg.embeds.shift().description.match(/\n\n/g) || []).length;
+
+			const successEmbed = new EmbedBuilder().setColor('Green').setTitle('Game won!');
+			successEmbed.setDescription(`${interaction.user.username} guessed the song properly!`);
+			successEmbed.setFields([
+				{
+					name: 'Hints used',
+					value: `${hints} hints`
+				},
+				{
+					name: 'Song',
+					value: gameInfo.song
+				}
+			]);
+
 			await interaction.reply({
-				content: `${interaction.user.username} won! The song was ${gameInfo.song}`
+				embeds: [successEmbed]
+			});
+
+			// creates the player if it doesn't already exist
+			await getPlayer(interaction.user.id);
+
+			const pointsGiven = 10 - hints * 2;
+
+			await prisma.member.update({
+				where: {
+					id: interaction.user.id
+				},
+				data: {
+					points: {
+						increment: pointsGiven
+					}
+				}
+			});
+
+			// since they're numbers
+			const highlight = (text: number) => bold(`${text}`);
+
+			interaction.followUp({
+				content: `You earned a total of ${highlight(
+					pointsGiven
+				)} points for guessing with only ${highlight(hints)} hints.`,
+				ephemeral: true
 			});
 
 			gameCache.del(`gameInfo-${id}`);

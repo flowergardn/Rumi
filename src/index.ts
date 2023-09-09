@@ -11,7 +11,7 @@ import { GatewayIntentBits } from 'discord.js';
 export const prisma = new PrismaClient();
 
 export const client = new Client({
-	intents: [GatewayIntentBits.Guilds],
+	intents: [GatewayIntentBits.Guilds, GatewayIntentBits.MessageContent],
 	silent: false
 });
 
