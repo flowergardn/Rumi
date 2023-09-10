@@ -1,5 +1,6 @@
 import {
 	ActionRowBuilder,
+	ApplicationCommandOptionType,
 	ButtonBuilder,
 	ButtonInteraction,
 	ButtonStyle,
@@ -11,7 +12,7 @@ import {
 	inlineCode,
 	spoiler
 } from 'discord.js';
-import { ButtonComponent, Discord, SelectMenuComponent, Slash } from 'discordx';
+import { ButtonComponent, Discord, SelectMenuComponent, Slash, SlashOption } from 'discordx';
 import axios from 'axios';
 import { prisma } from '..';
 
@@ -56,7 +57,16 @@ const getPlayer = async (id: string) => {
 @Discord()
 class Game {
 	@Slash({ description: 'Start the game' })
-	async guess(interaction: CommandInteraction) {
+	async guess(
+		@SlashOption({
+			description: 'A specific artist',
+			name: 'artist',
+			required: false,
+			type: ApplicationCommandOptionType.String
+		})
+		specificArtist: string,
+		interaction: CommandInteraction
+	) {
 		await interaction.deferReply({
 			ephemeral: true
 		});
@@ -67,18 +77,27 @@ class Game {
 			}
 		});
 
-		const artists: string[] = JSON.parse(server.artists);
-		const artistId = random(artists);
+		let artist;
 
-		const artist = await prisma.artist.findUnique({
-			where: {
-				id: artistId
-			}
-		});
+		if (!specificArtist) {
+			const artists: string[] = JSON.parse(server.artists);
+			const artistId = random(artists);
+			artist = await prisma.artist.findUnique({
+				where: {
+					id: artistId
+				}
+			});
+		} else {
+			artist = await prisma.artist.findUnique({
+				where: {
+					name: specificArtist
+				}
+			});
+		}
 
 		if (!artist) {
 			await interaction.editReply({
-				content: `An error occured: Chosen artist with ID of ${inlineCode(artistId)} was not found`
+				content: `An error occured: Chosen artist was not found`
 			});
 			return;
 		}
