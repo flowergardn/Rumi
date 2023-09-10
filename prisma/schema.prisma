@@ -27,4 +27,5 @@ model Artist {
 model Member {
   id String @id
   points Int @default(0)
+  wins Int @default(0)
 }

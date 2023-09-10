@@ -328,6 +328,9 @@ class Game {
 				data: {
 					points: {
 						increment: pointsGiven
+					},
+					wins: {
+						increment: 1
 					}
 				}
 			});
