@@ -1,8 +1,9 @@
 import { ApplicationCommandOptionType, CommandInteraction, inlineCode } from 'discord.js';
-import { Discord, Slash, SlashOption } from 'discordx';
+import { Discord, Guard, Slash, SlashOption } from 'discordx';
 import axios from 'axios';
 import { prisma } from '..';
 import { env } from '../env';
+import { RequirePermission } from '../guards/RequirePermission';
 
 interface LastFMTrack {
 	name: string;
@@ -15,6 +16,7 @@ interface LastFMResponse {
 }
 
 @Discord()
+@Guard(RequirePermission('ManageGuild'))
 class AddArtist {
 	@Slash({ description: 'Add an artist to the server' })
 	async add(
