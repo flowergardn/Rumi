@@ -273,6 +273,18 @@ class Game {
 
 		if (!gameInfo) return;
 
+		const cd = gameCache.get(`guessCooldown-${id}`);
+
+		if (typeof cd != 'undefined') {
+			interaction.reply({
+				content: `You've already guessed recently! Wait a moment to recollect your thoughts.`,
+				ephemeral: true
+			});
+			return;
+		}
+
+		gameCache.set(`guessCooldown-${id}`, true, 20);
+
 		const song = interaction.values?.[0];
 		let songTitle = new Buffer(song, 'base64').toString('ascii');
 
@@ -324,6 +336,7 @@ class Game {
 
 			clearTimeout(gameInfo.timer);
 			gameCache.del(`gameInfo-${id}`);
+			gameCache.del(`guessCooldown-${id}`);
 		} else {
 			// TODO: Add a cooldown for guessing.
 			await interaction.reply({
