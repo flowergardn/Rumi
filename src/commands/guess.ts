@@ -9,12 +9,18 @@ import {
 	SelectMenuBuilder,
 	SelectMenuInteraction,
 	bold,
-	inlineCode,
 	spoiler
 } from 'discord.js';
 import { ButtonComponent, Discord, SelectMenuComponent, Slash, SlashOption } from 'discordx';
 import axios from 'axios';
 import { prisma } from '..';
+
+// The length of games within seconds
+const GAME_LENGTH = 120;
+// The cooldown applied to the game for each lyric
+const LYRIC_COOLDOWN = 20;
+// The cooldown applied to each user, per game, for each guess.
+const GUESS_COOLDOWN = 5;
 
 const random = (array: string[]): string => array[Math.floor(Math.random() * array.length)];
 
@@ -195,7 +201,7 @@ class Game {
 			msg.reply({
 				embeds: [embed]
 			});
-		}, 120 * 1000);
+		}, GAME_LENGTH * 1000);
 
 		gameCache.set(`gameInfo-${msg.id}`, {
 			song,
@@ -259,7 +265,7 @@ class Game {
 			embeds: [newEmbed]
 		});
 
-		gameCache.set(`lyricCooldown-${id}`, true, 20);
+		gameCache.set(`lyricCooldown-${id}`, true, LYRIC_COOLDOWN);
 
 		interaction.deferUpdate();
 	}
@@ -273,7 +279,9 @@ class Game {
 
 		if (!gameInfo) return;
 
-		const cd = gameCache.get(`guessCooldown-${id}`);
+		const cooldownKey = `guessCooldown-${id}-${interaction.user.id}`;
+
+		const cd = gameCache.get(cooldownKey);
 
 		if (typeof cd != 'undefined') {
 			interaction.reply({
@@ -283,7 +291,7 @@ class Game {
 			return;
 		}
 
-		gameCache.set(`guessCooldown-${id}`, true, 20);
+		gameCache.set(cooldownKey, true, GUESS_COOLDOWN);
 
 		const song = interaction.values?.[0];
 		let songTitle = new Buffer(song, 'base64').toString('ascii');
@@ -336,7 +344,7 @@ class Game {
 
 			clearTimeout(gameInfo.timer);
 			gameCache.del(`gameInfo-${id}`);
-			gameCache.del(`guessCooldown-${id}`);
+			gameCache.del(cooldownKey);
 		} else {
 			// TODO: Add a cooldown for guessing.
 			await interaction.reply({
