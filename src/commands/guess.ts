@@ -27,7 +27,6 @@ const LYRIC_COOLDOWN = 20;
 const GUESS_COOLDOWN = 5;
 
 const random = (array: string[]): string => array[Math.floor(Math.random() * array.length)];
-const sleep = util.promisify(setTimeout);
 
 import NodeCache from 'node-cache';
 import shuffleArray from '../lib/shuffle';
@@ -106,8 +105,6 @@ class Game {
 			lyrics: string;
 		}
 	) {
-		console.log(`past`);
-
 		const embed = new EmbedBuilder().setTitle('Guess the song!');
 		embed.setDescription(opt.randomLyrics);
 		embed.setFooter({
@@ -260,7 +257,6 @@ class Game {
 		const checkInterval = setInterval(() => {
 			if (!gameCache.has(`gameWaiting-${message.id}`)) {
 				clearInterval(checkInterval); // Stop the interval if the variable is no longer in the cache
-				console.log(`Variable no longer exists.`);
 				message.delete();
 				this.startGame(interaction, {
 					song,
@@ -276,6 +272,8 @@ class Game {
 	async joinGame(interaction: ButtonInteraction) {
 		const key = `gameWaiting-${interaction.message.id}`;
 		let players: string[] = gameCache.get(key);
+
+		if (!players) return;
 
 		if (players.includes(interaction.user.id)) return;
 
@@ -320,7 +318,6 @@ class Game {
 		if (!gameInfo) return;
 
 		if (!embed) {
-			console.log(msg.embeds);
 			interaction.reply({
 				content: `An error occured whilst trying to show a hint!`,
 				ephemeral: true
@@ -431,13 +428,10 @@ class Game {
 			gameCache.del(`gameInfo-${id}`);
 			gameCache.del(cooldownKey);
 		} else {
-			// TODO: Add a cooldown for guessing.
 			await interaction.reply({
 				content: `You didn't get it. Try again soon!`,
 				ephemeral: true
 			});
 		}
-
-		console.log(`person chose ${songTitle}, song is titled ${gameInfo.song}`);
 	}
 }
