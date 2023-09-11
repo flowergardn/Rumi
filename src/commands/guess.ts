@@ -275,6 +275,8 @@ class Game {
 
 		if (!players) return;
 
+		console.log(typeof players);
+
 		if (players.includes(interaction.user.id)) return;
 
 		players.push(interaction.user.id);
