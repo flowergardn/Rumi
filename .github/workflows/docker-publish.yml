@@ -16,6 +16,7 @@ env:
   REGISTRY: ghcr.io
   # github.repository as <account>/<repo>
   IMAGE_NAME: ${{ github.repository }}
+  DATABASE_URL: 'https://fake.com'
 
 jobs:
   build:
