@@ -17,7 +17,7 @@ import {
 import { ButtonComponent, Discord, SelectMenuComponent, Slash, SlashOption } from 'discordx';
 import axios from 'axios';
 import { prisma } from '..';
-import util from 'util';
+const { nanoid } = require('nanoid');
 
 // The length of games within seconds
 const GAME_LENGTH = 120;
@@ -126,8 +126,10 @@ class Game {
 
 		// shuffled so the winning song isn't always at the bottom
 		const opts = shuffleArray(decoys).map((song) => {
-			const id = Buffer.from(song).toString('base64');
+			const id = nanoid();
 			console.log(`Adding ${song} to the select menu. (ID: ${id})`);
+
+			gameCache.set(`song-${id}`, song);
 
 			return {
 				label: song,
@@ -380,8 +382,16 @@ class Game {
 
 		gameCache.set(cooldownKey, true, GUESS_COOLDOWN);
 
-		const song = interaction.values?.[0];
-		let songTitle = new Buffer(song, 'base64').toString('ascii');
+		const songId = interaction.values?.[0];
+		let songTitle: string = gameCache.get(`song-${songId}`);
+
+		if (!songTitle) {
+			await interaction.reply({
+				content: `Something went wrong! Could not find ID from ${songId}`,
+				ephemeral: true
+			});
+			return;
+		}
 
 		if (songTitle.toLowerCase() == gameInfo.song.toLowerCase()) {
 			const hints = (msg.embeds.shift().description.match(/\n\n/g) || []).length;
