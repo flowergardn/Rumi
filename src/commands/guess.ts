@@ -272,11 +272,23 @@ class Game {
 	async joinGame(interaction: ButtonInteraction) {
 		const key = `gameWaiting-${interaction.message.id}`;
 
-		if (typeof gameCache.get(key) == 'undefined') return;
+		if (typeof gameCache.get(key) == 'undefined') {
+			await interaction.reply({
+				content: `This message is from an old game.`,
+				ephemeral: true
+			});
+			return;
+		}
 
-		let players: string[] = gameCache.get(key) ?? [];
+		let players: string[] = gameCache.get(key);
 
-		if (players.includes(interaction.user.id)) return;
+		if (players.includes(interaction.user.id)) {
+			await interaction.reply({
+				content: `You're already in this game!`,
+				ephemeral: true
+			});
+			return;
+		}
 
 		players.push(interaction.user.id);
 
