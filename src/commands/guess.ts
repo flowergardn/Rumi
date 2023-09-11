@@ -148,7 +148,7 @@ class Game {
 		});
 
 		interaction.editReply({
-			content: `Started game! Name of song is: ${spoiler(opt.song)}`
+			content: `Started game!`
 		});
 
 		// Using node-cache expiry was the first solution, it did not work.
