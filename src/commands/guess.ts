@@ -6,14 +6,18 @@ import {
 	ButtonStyle,
 	CommandInteraction,
 	EmbedBuilder,
+	GuildTextBasedChannel,
+	Message,
 	SelectMenuBuilder,
 	SelectMenuInteraction,
 	bold,
+	inlineCode,
 	spoiler
 } from 'discord.js';
 import { ButtonComponent, Discord, SelectMenuComponent, Slash, SlashOption } from 'discordx';
 import axios from 'axios';
 import { prisma } from '..';
+import util from 'util';
 
 // The length of games within seconds
 const GAME_LENGTH = 120;
@@ -23,9 +27,11 @@ const LYRIC_COOLDOWN = 20;
 const GUESS_COOLDOWN = 5;
 
 const random = (array: string[]): string => array[Math.floor(Math.random() * array.length)];
+const sleep = util.promisify(setTimeout);
 
 import NodeCache from 'node-cache';
 import shuffleArray from '../lib/shuffle';
+import { Artist } from '@prisma/client';
 const gameCache = new NodeCache();
 
 interface GameInfo {
@@ -62,6 +68,124 @@ const getPlayer = async (id: string) => {
 
 @Discord()
 class Game {
+	private async sendIntro(artist: Artist, channel: GuildTextBasedChannel): Promise<Message> {
+		const introductionEmbed = new EmbedBuilder()
+			.setColor('Random')
+			.setTitle(`A new game has started!`)
+			.setDescription(
+				`Members will be given a verse from a random ${inlineCode(
+					artist.name
+				)} song. The person who selects the right song from three select choices wins. You get a total of **5** hints, which show more lyrics, you in?`
+			)
+			.setFooter({
+				text: `Two people are required to start!`
+			});
+		const joinBtn = new ButtonBuilder()
+			.setLabel('Join the game')
+			.setStyle(ButtonStyle.Success)
+			.setCustomId('join_game');
+
+		const row = new ActionRowBuilder<ButtonBuilder>().addComponents([joinBtn]);
+
+		const msg = await channel.send({
+			embeds: [introductionEmbed],
+			components: [row]
+		});
+
+		gameCache.set(`gameWaiting-${msg.id}`, []);
+
+		return msg;
+	}
+
+	private async startGame(
+		interaction: CommandInteraction,
+		opt: {
+			song: string;
+			songs: string[];
+			randomLyrics: string;
+			lyrics: string;
+		}
+	) {
+		console.log(`past`);
+
+		const embed = new EmbedBuilder().setTitle('Guess the song!');
+		embed.setDescription(opt.randomLyrics);
+		embed.setFooter({
+			text: `You have two minutes`
+		});
+		embed.setTimestamp();
+
+		const getMoreLyrics = new ButtonBuilder()
+			.setLabel('Get more lyrics')
+			.setStyle(ButtonStyle.Secondary)
+			.setCustomId('get_more');
+
+		const row = new ActionRowBuilder<ButtonBuilder>().addComponents([getMoreLyrics]);
+
+		const selectMenu = new SelectMenuBuilder();
+		selectMenu.setCustomId(`lyric_guess`);
+
+		const decoys = [random(opt.songs), random(opt.songs), opt.song];
+
+		// shuffled so the winning song isn't always at the bottom
+		const opts = shuffleArray(decoys).map((song) => {
+			const id = Buffer.from(song).toString('base64');
+			console.log(`Adding ${song} to the select menu. (ID: ${id})`);
+
+			return {
+				label: song,
+				value: id,
+				emoji: '🎶'
+			};
+		});
+
+		selectMenu.setOptions([...new Set(opts)]);
+
+		const row2 = new ActionRowBuilder<SelectMenuBuilder>().addComponents([selectMenu]);
+
+		const msg = await interaction.channel.send({
+			embeds: [embed],
+			components: [row, row2]
+		});
+
+		interaction.editReply({
+			content: `Started game! Name of song is: ${spoiler(opt.song)}`
+		});
+
+		// Using node-cache expiry was the first solution, it did not work.
+
+		const timeout = setTimeout(() => {
+			const keyId = `gameInfo-${msg.id}`;
+			const gameInfo: GameInfo = gameCache.get(keyId);
+
+			if (!gameInfo) return;
+
+			const embed = new EmbedBuilder()
+				.setTitle('Times up!')
+				.setColor('Red')
+				.setDescription(`No one guessed the song in time.`)
+				.setFields([
+					{
+						name: 'Song',
+						value: gameInfo.song
+					}
+				]);
+
+			gameCache.del(keyId);
+
+			msg.reply({
+				embeds: [embed]
+			});
+		}, GAME_LENGTH * 1000);
+
+		gameCache.set(`gameInfo-${msg.id}`, {
+			song: opt.song,
+			allLyrics: opt.lyrics,
+			currentLyrics: opt.randomLyrics,
+			timer: timeout
+		});
+	}
+
 	@Slash({ description: 'Start the game' })
 	async guess(
 		@SlashOption({
@@ -83,7 +207,7 @@ class Game {
 			}
 		});
 
-		let artist;
+		let artist: Artist;
 
 		if (!specificArtist) {
 			const artists: string[] = JSON.parse(server.artists);
@@ -129,86 +253,39 @@ class Game {
 
 		const songLyrics = songLyricData.lyrics;
 
-		console.log(`chose ${song}`);
-
 		const randomLyrics = getRandomLyric(songLyrics);
 
-		const embed = new EmbedBuilder().setTitle('Guess the song!');
-		embed.setDescription(randomLyrics);
-		embed.setFooter({
-			text: `You have two minutes`
-		});
-		embed.setTimestamp();
+		const message = await this.sendIntro(artist, interaction.channel);
 
-		const getMoreLyrics = new ButtonBuilder()
-			.setLabel('Get more lyrics')
-			.setStyle(ButtonStyle.Secondary)
-			.setCustomId('get_more');
+		const checkInterval = setInterval(() => {
+			if (!gameCache.has(`gameWaiting-${message.id}`)) {
+				clearInterval(checkInterval); // Stop the interval if the variable is no longer in the cache
+				console.log(`Variable no longer exists.`);
+				message.delete();
+				this.startGame(interaction, {
+					song,
+					songs,
+					randomLyrics,
+					lyrics: songLyrics
+				});
+			}
+		}, 1000);
+	}
 
-		const row = new ActionRowBuilder<ButtonBuilder>().addComponents([getMoreLyrics]);
+	@ButtonComponent({ id: 'join_game' })
+	async joinGame(interaction: ButtonInteraction) {
+		const key = `gameWaiting-${interaction.message.id}`;
+		let players: string[] = gameCache.get(key);
 
-		const selectMenu = new SelectMenuBuilder();
-		selectMenu.setCustomId(`lyric_guess`);
+		if (players.includes(interaction.user.id)) return;
 
-		const decoys = [random(songs), random(songs), song];
+		players.push(interaction.user.id);
 
-		// shuffled so the winning song isn't always at the bottom
-		const opts = shuffleArray(decoys).map((song) => {
-			const id = Buffer.from(song).toString('base64');
-			console.log(`Adding ${song} to the select menu. (ID: ${id})`);
+		gameCache.set(key, players);
 
-			return {
-				label: song,
-				value: id,
-				emoji: '🎶'
-			};
-		});
+		if (players.length >= 2) gameCache.del(key);
 
-		selectMenu.setOptions([...new Set(opts)]);
-
-		const row2 = new ActionRowBuilder<SelectMenuBuilder>().addComponents([selectMenu]);
-
-		const msg = await interaction.channel.send({
-			embeds: [embed],
-			components: [row, row2]
-		});
-
-		interaction.editReply({
-			content: `Started game! Name of song is: ${spoiler(song)}`
-		});
-
-		// Using node-cache expiry was the first solution, it did not work.
-
-		const timeout = setTimeout(() => {
-			const keyId = `gameInfo-${msg.id}`;
-			const gameInfo: GameInfo = gameCache.get(keyId);
-
-			if (!gameInfo) return;
-
-			const embed = new EmbedBuilder()
-				.setTitle('Times up!')
-				.setColor('Red')
-				.setDescription(`No one guessed the song in time.`)
-				.setFields([
-					{
-						name: 'Song',
-						value: gameInfo.song
-					}
-				]);
-
-			gameCache.del(keyId);
-
-			msg.reply({
-				embeds: [embed]
-			});
-		}, GAME_LENGTH * 1000);
-
-		gameCache.set(`gameInfo-${msg.id}`, {
-			song,
-			allLyrics: songLyrics,
-			currentLyrics: randomLyrics,
-			timer: timeout
-		});
+		await interaction.deferUpdate();
 	}
 
 	@ButtonComponent({ id: /get_more/ })
@@ -311,6 +388,11 @@ class Game {
 					value: gameInfo.song
 				}
 			]);
+
+			// await msg.edit({
+			// 	embeds: msg.embeds,
+			// 	components: []
+			// });
 
 			await interaction.reply({
 				embeds: [successEmbed]
