@@ -296,7 +296,9 @@ class Game {
 
 		gameCache.set(key, players);
 
-		if (players.length >= 2) gameCache.del(key);
+		if (players.length >= 2) {
+			setTimeout(() => gameCache.del(key), 1500);
+		}
 
 		await interaction.deferUpdate();
 	}
