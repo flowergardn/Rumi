@@ -9,5 +9,5 @@ COPY . .
 
 # Install dependencies, then run the program
 RUN yarn
-RUN yarn migrate
+RUN npx prisma generate
 ENTRYPOINT [ "yarn", "start" ]
