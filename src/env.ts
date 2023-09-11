@@ -8,6 +8,7 @@ export const env = createEnv({
 	 */
 	clientPrefix: 'PUBLIC_',
 	server: {
+		DATABASE_URL: z.string().url(),
 		TOKEN: z.string(),
 		LAST_FM_TOKEN: z.string()
 	},
