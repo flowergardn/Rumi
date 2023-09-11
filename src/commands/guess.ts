@@ -271,9 +271,10 @@ class Game {
 	@ButtonComponent({ id: 'join_game' })
 	async joinGame(interaction: ButtonInteraction) {
 		const key = `gameWaiting-${interaction.message.id}`;
-		let players: string[] = gameCache.get(key) ?? [];
 
-		if (!players) return;
+		if (typeof gameCache.get(key) == 'undefined') return;
+
+		let players: string[] = gameCache.get(key) ?? [];
 
 		if (players.includes(interaction.user.id)) return;
 
